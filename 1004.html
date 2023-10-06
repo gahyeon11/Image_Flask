@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Move and Resize Object Images</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <input type="file" id="bgInput" accept="image/*" onchange="loadImage('bg')">
+    <input type="file" id="objectInput" accept="image/*" onchange="uploadImage()">
+    <button onclick="addObjectInput()">Add Object Image</button>
+    <canvas id="canvas" width="800" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let bgImage = new Image();
+        let objectImages = [];
+        let objectX = [];
+        let objectY = [];
+        let objectWidth = [];
+        let objectHeight = [];
+        let lastIndex; // 변수 lastIndex를 한 번만 선언합니다.
+
+        function addObjectInput() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = () => uploadImage();
+            document.body.appendChild(input);
+        }
+
+        function uploadImage() {
+            const objectInput = document.getElementById('objectInput');
+            const formData = new FormData();
+            formData.append('image', objectInput.files[0]);
+    
+            fetch('/removebg', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.blob())
+            .then(image => {
+                const objectUrl = URL.createObjectURL(image);
+                const newImage = new Image();
+                newImage.src = objectUrl;
+    
+                // 이미지를 로드한 후에 drawImages()를 호출합니다.
+                newImage.onload = () => {
+                    URL.revokeObjectURL(objectUrl);
+                    objectImages.push(newImage);
+                    objectX.push(0);
+                    objectY.push(0);
+                    objectWidth.push(500);
+                    objectHeight.push(500);
+                    drawImages();
+                };
+    
+                // 이미지 로드 중 오류 처리
+                newImage.onerror = () => {
+                    console.error('Image loading error');
+                };
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function loadImage(type) {
+            const input = document.getElementById(type === 'bg' ? 'bgInput' : 'objectInput');
+            const reader = new FileReader();
+    
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                    if (type === 'bg') {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        bgImage = img;
+                    } else {
+                        // 배열에서 마지막 객체 이미지의 속성을 업데이트합니다.
+                        if (lastIndex >= 0) {
+                            objectImages[lastIndex] = img;
+                            objectWidth[lastIndex] = img.width;
+                            objectHeight[lastIndex] = img.height;
+                        }
+                    }
+                    drawImages();
+                }
+                img.src = e.target.result;
+            }
+    
+            reader.readAsDataURL(input.files[0]);
+        }
+
+        window.addEventListener('keydown', function (e) {
+            let scale;
+            switch (e.key) {
+                case 'ArrowUp':
+                    // Update the properties of the last object image in the array
+                    if (lastIndex >= 0) {
+                        objectY[lastIndex] -= 5;
+                    }
+                    break;
+                case 'ArrowDown':
+                    if (lastIndex >= 0) {
+                        objectY[lastIndex] += 5;
+                    }
+                    break;
+                case 'ArrowLeft':
+                    if (lastIndex >= 0) {
+                        objectX[lastIndex] -= 5;
+                    }
+                    break;
+                case 'ArrowRight':
+                    if (lastIndex >= 0) {
+                        objectX[lastIndex] += 5;
+                    }
+                    break;
+                case '+':
+                    if (lastIndex >= 0) {
+                        scale = objectImages[lastIndex].width / objectImages[lastIndex].height;
+                        objectWidth[lastIndex] += 5 * scale;
+                        objectHeight[lastIndex] += 5;
+                    }
+                    break;
+                case '-':
+                    if (lastIndex >= 0) {
+                        scale = objectImages[lastIndex].width / objectImages[lastIndex].height;
+                        if (objectWidth[lastIndex] > 10 && objectHeight[lastIndex] > 10) {
+                            objectWidth[lastIndex] -= 5 * scale;
+                            objectHeight[lastIndex] -= 5;
+                        }
+                    }
+                    break;
+                default:
+                    return;s
+            }
+            drawImages();
+        });
+
+        function drawImages() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+            
+            // 모든 이미지가 로드될 때까지 대기합니다.
+            let imagesLoadedCount = 0;
+            objectImages.forEach((objectImage, index) => {
+                objectImage.onload = () => {
+                    imagesLoadedCount++;
+                    if (imagesLoadedCount === objectImages.length) {
+                        // 모든 이미지가 로드된 후에 그립니다.
+                        objectImages.forEach((loadedImage, loadedIndex) => {
+                            ctx.drawImage(
+                                loadedImage,
+                                objectX[loadedIndex],
+                                objectY[loadedIndex],
+                                objectWidth[loadedIndex],
+                                objectHeight[loadedIndex]
+                            );
+                        });
+                    }
+                };
+            });
+        }
+    </script>
+</body>
+</html>
